@@ -1,3 +1,5 @@
 chest_xray
 chest_xray.zip
 kaggle.json
+*.idea
+/py_project/__pycache__
