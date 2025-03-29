@@ -1,47 +1,53 @@
 import torch
-import torchvision.transforms as T
+import torch.nn as nn
+import torch.optim as optim
+import torchvision.models as models
 from torch.utils.data import DataLoader
 
 from dataset import PneumoniaDataset
+from training import train_model
 
-labels = ['PNEUMONIA', 'NORMAL']
+labels = ['opacity', 'normal']
 img_size = 224
 config = {
     'epochs': 10,
     'batch_size': 32,
-    'lr': 1e-3,
+    'lr': 1e-6,
     'betas': (0.9, 0.99),
-    'clip': 5,
+    'clip': 2,
     'device': 'cuda' if torch.cuda.is_available() else 'cpu',
-    'image_size': 150,
-    'dropout': 0.1,
+    'image_size': 224,
     'seed': 42,
     'log_every': 10,
 }
 
-transform = T.Compose([T.Resize(256), T.CenterCrop(224), T.ToTensor(),
-                       T.Normalize(mean=[0.583], std=[0.141])])
+DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+torch.manual_seed(config['seed'])
 
 print("Fetching Training data...")
-train_dataset = PneumoniaDataset('../chest_xray/train/', labels, transform=transform)
-val_dataset = PneumoniaDataset('../chest_xray/val/', labels, transform=transform)
-test_dataset = PneumoniaDataset('../chest_xray/test/', labels, transform=transform)
-
+train_dataset = PneumoniaDataset('../chest_xray/train/', labels)
+val_dataset = PneumoniaDataset('../chest_xray/val/', labels)
+test_dataset = PneumoniaDataset('../chest_xray/test/', labels)
 
 print("Training data size:", len(train_dataset))
 print("Validation data size:", len(val_dataset))
-print("Testing data size:", test_dataset.data[0].shape, test_dataset.data[1].shape)
+print("Testing data size:", len(test_dataset))
 
-#
-# x_train = x_train.reshape(-1, img_size, img_size, 1)
-# y_train = np.array(y_train)
-#
-# x_val = x_val.reshape(-1, img_size, img_size, 1)
-# y_val = np.array(y_val)
-#
-# x_test = x_test.reshape(-1, img_size, img_size, 1)
-# y_test = np.array(y_test)
+config['train_loader'] = DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True)
+config['val_loader'] = DataLoader(val_dataset, batch_size=config['batch_size'], shuffle=False)
+config['test_loader'] = DataLoader(test_dataset, batch_size=config['batch_size'], shuffle=False)
 
+model = models.resnet18(weights=None)
 
-# config['train_loader'] = DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True)
-# config['val_loader'] = DataLoader(val_dataset, batch_size=config['batch_size'], shuffle=False)
+model.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
+
+model.fc = nn.Linear(model.fc.in_features, 1)
+
+model = model.to(config['device'])
+
+config['optimizer'] = optim.AdamW(model.parameters(), lr=config['lr'], betas=config['betas'])
+config['criterion'] = nn.BCEWithLogitsLoss()
+
+print(DEVICE)
+
+train_model(model, config)
