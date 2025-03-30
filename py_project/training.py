@@ -2,8 +2,9 @@ import time
 
 import torch
 import torch.nn as nn
-import wandb
 from torch.utils.data import DataLoader
+
+import wandb
 
 
 def print_logs(dataset_type: str, logs: dict):
