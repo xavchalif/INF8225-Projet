@@ -3,3 +3,4 @@ chest_xray.zip
 kaggle.json
 *.idea
 /py_project/__pycache__
+/py_project/wandb

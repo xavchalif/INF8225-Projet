@@ -1,15 +1,13 @@
 import os
 
 import torch
-import torchvision.transforms as T
 from PIL import Image
 from torch.utils.data import Dataset
 
 
 class PneumoniaDataset(Dataset):
-    def __init__(self, data_dir, labels):
-        self.transform = T.Compose([T.Resize(256), T.CenterCrop(224), T.ToTensor(),
-                                    T.Normalize(mean=[0.583], std=[0.141])])
+    def __init__(self, data_dir, labels, transforms):
+        self.transform = transforms
         self.data = []  # Store (image_path, label) tuples
         for label in labels:
             path = os.path.join(data_dir, label)
@@ -28,5 +26,5 @@ class PneumoniaDataset(Dataset):
         if self.transform:
             image = self.transform(image)
 
-        label = torch.tensor(label, dtype=torch.float).unsqueeze(0)
+        label = torch.tensor(label, dtype=torch.long)
         return image, label

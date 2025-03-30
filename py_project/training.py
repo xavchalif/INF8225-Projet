@@ -1,10 +1,8 @@
 import time
-from collections import defaultdict
 
-import numpy as np
 import torch
 import torch.nn as nn
-from sklearn.metrics import f1_score
+import wandb
 from torch.utils.data import DataLoader
 
 
@@ -13,75 +11,92 @@ def print_logs(dataset_type: str, logs: dict):
     print(f'{dataset_type} -\t{desc}'.expandtabs(5))
 
 
-def eval_model(model: nn.Module, dataloader: DataLoader, config: dict) -> dict:
-    model.eval()  # Set model to evaluation mode
+def eval_model(model: nn.Module, config: dict, dataloader: DataLoader, split: str) -> dict:
+    model.eval()
     device = config['device']
     criterion = config['criterion']
-    logs = defaultdict(list)
     model.to(device)
-    all_preds = []
-    all_labels = []
+    val_loss = 0.0
+    correct = 0
+    total = 0
     with torch.no_grad():
         for images, labels in dataloader:
-            images, labels = images.to(device), labels.to(device).float()
+            images, labels = images.to(device), labels.to(device)
             outputs = model(images)
             loss = criterion(outputs, labels)
-            logs['val_loss'].append(loss.cpu().item())
+            val_loss += loss.item() * images.size(0)
 
-            preds = torch.sigmoid(outputs).round()
-            all_preds.extend(preds.cpu().numpy())
-            all_labels.extend(labels.cpu().numpy())
+            _, predicted = torch.max(outputs.data, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
 
-    f1 = f1_score(all_labels, all_preds)
-    logs['val_f1_score'] = f1
+        epoch_val_loss = val_loss / len(dataloader.dataset)
+        epoch_accuracy = 100 * correct / total
 
-    return {name: np.mean(values) for name, values in logs.items()}
+        if split == 'train':
+            logs = {
+                'train_loss': epoch_val_loss,
+                'epoch_duration': 0.0
+            }
+        elif split == 'val':
+            logs = {
+                'val_loss': epoch_val_loss,
+                'val_accuracy': epoch_accuracy
+            }
+        else:
+            logs = {
+                'test_loss': epoch_val_loss,
+                'test_accuracy': epoch_accuracy
+            }
 
+    return logs
 
 
 def train_model(model: nn.Module, config: dict):
-    train_loader, val_loader = config['train_loader'], config['val_loader']
+    train_loader = config['train_loader']
     optimizer = config['optimizer']
     criterion = config['criterion']
-    clip = config['clip']
+    scheduler = config['scheduler']
+    epochs = config['epochs']
     device = config['device']
+    print(f'Starting training for {epochs} epochs on {device}.')
+    print(f'\nEpoch 0')
+    train_logs = eval_model(model, config, config['train_loader'], 'train')
+    print_logs('Train', train_logs)
+    val_logs = eval_model(model, config, config['val_loader'], 'val')
+    print_logs('Eval', val_logs)
 
-    start_time = time.time()
+    wandb.log({**train_logs, **val_logs})
 
-    print(f'Starting training for {config["epochs"]} epochs on {device}.')
-    for epoch in range(config['epochs']):
-        epoch_start_time = time.time()  # Start time for each epoch
+    for epoch in range(epochs):
+        epoch_start_time = time.time()
         print(f'\nEpoch {epoch + 1}')
-
         model.train()
         train_loss = 0.0
-        for batch_id, (images, labels) in enumerate(train_loader):
-            images, labels = images.to(device), labels.to(device).float()
+        for batch_idx, (images, labels) in enumerate(train_loader):
+            images, labels = images.to(device), labels.to(device)
+
             optimizer.zero_grad()
             outputs = model(images)
             loss = criterion(outputs, labels)
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), clip)
             optimizer.step()
-            train_loss += loss.item()
-        train_loss /= len(train_loader)
 
-        epoch_end_time = time.time()  # End time for the current epoch
-        epoch_duration = epoch_end_time - epoch_start_time  # Calculate epoch duration
-        print(f"Time taken: {epoch_duration:.2f} seconds")
+            train_loss += loss.item() * images.size(0)
+            wandb.log({f'train_loss': loss.item()})
 
-        # Log metrics
+        epoch_end_time = time.time()
+        epoch_duration = epoch_end_time - epoch_start_time
+
+        scheduler.step()
         train_logs = {
-            'train_loss': train_loss,
-            # 'epoch_duration': epoch_duration
+            'epoch_duration': epoch_duration
         }
         print_logs('Train', train_logs)
 
-        val_logs = eval_model(model, val_loader, config)
+        val_logs = eval_model(model, config, config['val_loader'], 'val')
         print_logs('Eval', val_logs)
 
-        # Log everything to W&B
-        # wandb.log({**train_logs, **val_logs})
+        wandb.log({**train_logs, **val_logs})
 
-    total_training_time = time.time() - start_time  # Total training time
-    print(f"\nTotal Training Time: {total_training_time:.2f} seconds")
+    return model
