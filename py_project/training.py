@@ -8,9 +8,9 @@ from torcheval.metrics.functional import multiclass_f1_score
 import wandb
 
 
-# def print_logs(dataset_type: str, logs: dict):
-#     desc = '\t'.join([f'{name}: {value:.4f}' for name, value in logs.items()])
-#     print(f'{dataset_type} -\t{desc}'.expandtabs(5))
+def print_logs(dataset_type: str, logs: dict):
+    desc = '\t'.join([f'{name}: {value:.4f}' for name, value in logs.items()])
+    print(f'{dataset_type} -\t{desc}'.expandtabs(5))
 
 
 def eval_model(model: nn.Module, config: dict, dataloader: DataLoader, split: str) -> dict:
@@ -71,9 +71,9 @@ def train_model(model: nn.Module, config: dict):
     print(f'Starting training for {epochs} epochs on {device}.')
     print(f'\nEpoch 0')
     train_logs = eval_model(model, config, config['train_loader'], 'train')
-    # print_logs('Train', train_logs)
+    print_logs('Train', train_logs)
     val_logs = eval_model(model, config, config['val_loader'], 'val')
-    # print_logs('Eval', val_logs)
+    print_logs('Eval', val_logs)
 
     wandb.log({**train_logs, **val_logs})
 
@@ -101,10 +101,10 @@ def train_model(model: nn.Module, config: dict):
         train_logs = {
             'epoch_duration': epoch_duration
         }
-        # print_logs('Train', train_logs)
+        print_logs('Train', train_logs)
 
         val_logs = eval_model(model, config, config['val_loader'], 'val')
-        # print_logs('Eval', val_logs)
+        print_logs('Eval', val_logs)
 
         wandb.log({**train_logs, **val_logs})
 

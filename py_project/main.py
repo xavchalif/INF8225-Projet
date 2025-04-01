@@ -17,6 +17,7 @@ config = {
     'device': 'cuda' if torch.cuda.is_available() else 'cpu',
     'seed': 42,
     'dropout': 0.1,
+    'log': 'online'  # 'online' for logging / 'offline' for testing
 }
 
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -27,7 +28,7 @@ config['train_loader'] = create_dataloader('../chest_xray/train/', labels, confi
 config['val_loader'] = create_dataloader('../chest_xray/val/', labels, config, 'val')
 config['test_loader'] = create_dataloader('../chest_xray/test/', labels, config, 'test')
 
-model = Model(config, labels)
+model = Model(config, len(labels))
 nb_params, model_size = model.get_summary(config)
 resnet = model.resnet
 
@@ -38,6 +39,7 @@ config['scheduler'] = lr_scheduler.ExponentialLR(config['optimizer'], gamma=0.9)
 config['criterion'] = nn.CrossEntropyLoss()
 
 with wandb.init(
+        mode=config['log'],
         config=config,
         entity="guipreg-polytechnique-montr-al",
         project='INF8225-PROJECT',
