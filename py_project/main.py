@@ -5,7 +5,7 @@ from torch.optim import lr_scheduler
 
 import wandb
 from dataset import create_dataloader
-from model import ResNet
+from model import Model
 from training import train_model, eval_model, print_logs
 
 labels = ['opacity', 'normal']
@@ -27,13 +27,13 @@ config['train_loader'] = create_dataloader('../chest_xray/train/', labels, confi
 config['val_loader'] = create_dataloader('../chest_xray/val/', labels, config, 'val')
 config['test_loader'] = create_dataloader('../chest_xray/test/', labels, config, 'test')
 
-resnet = ResNet(config, labels)
-nb_params, model_size = resnet.get_summary(config)
-model = resnet.model
+model = Model(config, labels)
+nb_params, model_size = model.get_summary(config)
+resnet = model.resnet
 
-model = model.to(config['device'])
+resnet = resnet.to(config['device'])
 
-config['optimizer'] = optim.AdamW(model.parameters(), lr=config['lr'], betas=config['betas'], weight_decay=1e-4)
+config['optimizer'] = optim.AdamW(resnet.parameters(), lr=config['lr'], betas=config['betas'], weight_decay=1e-4)
 config['scheduler'] = lr_scheduler.ExponentialLR(config['optimizer'], gamma=0.9)
 config['criterion'] = nn.CrossEntropyLoss()
 
@@ -45,8 +45,8 @@ with wandb.init(
         save_code=True,
 ):
     wandb.log({'nb_params': nb_params, 'model_size': model_size})
-    trained_model = train_model(model, config)
-    print("Testing the model...")
+    trained_model = train_model(resnet, config)
+    print("\nTesting the model...")
     test_logs = eval_model(trained_model, config, config['test_loader'], 'test')
     print_logs('Test', test_logs)
     wandb.log({**test_logs})

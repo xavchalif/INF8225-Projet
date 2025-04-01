@@ -4,19 +4,19 @@ from torchinfo import summary
 from torchvision import models
 
 
-class ResNet(nn.Module):
+class Model(nn.Module):
     def __init__(self, config, labels):
         super().__init__()
-        self.model = models.resnet18(weights=None)
-        self.model.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
+        self.resnet = models.resnet18(weights=None)
+        self.resnet.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
 
-        self.model.fc = nn.Sequential(
+        self.resnet.fc = nn.Sequential(
             nn.Dropout(p=config['dropout']),
-            nn.Linear(self.model.fc.in_features, len(labels))
+            nn.Linear(self.resnet.fc.in_features, len(labels))
         )
 
     def forward(self, x):
-        return self.model(x)
+        return self.resnet(x)
 
     def get_summary(self, config):
         model_summary = summary(

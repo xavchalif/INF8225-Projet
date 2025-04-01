@@ -3,13 +3,14 @@ import time
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
+from torcheval.metrics.functional import multiclass_f1_score
 
 import wandb
 
 
-def print_logs(dataset_type: str, logs: dict):
-    desc = '\t'.join([f'{name}: {value:.4f}' for name, value in logs.items()])
-    print(f'{dataset_type} -\t{desc}'.expandtabs(5))
+# def print_logs(dataset_type: str, logs: dict):
+#     desc = '\t'.join([f'{name}: {value:.4f}' for name, value in logs.items()])
+#     print(f'{dataset_type} -\t{desc}'.expandtabs(5))
 
 
 def eval_model(model: nn.Module, config: dict, dataloader: DataLoader, split: str) -> dict:
@@ -20,6 +21,10 @@ def eval_model(model: nn.Module, config: dict, dataloader: DataLoader, split: st
     val_loss = 0.0
     correct = 0
     total = 0
+
+    all_preds = []
+    all_labels = []
+
     with torch.no_grad():
         for images, labels in dataloader:
             images, labels = images.to(device), labels.to(device)
@@ -31,6 +36,13 @@ def eval_model(model: nn.Module, config: dict, dataloader: DataLoader, split: st
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
 
+            all_preds.append(predicted)
+            all_labels.append(labels)
+
+        all_preds = torch.cat(all_preds)
+        all_labels = torch.cat(all_labels)
+        f1_score = multiclass_f1_score(all_preds, all_labels, num_classes=2, average='macro').item() * 100
+
         epoch_val_loss = val_loss / len(dataloader.dataset)
         epoch_accuracy = 100 * correct / total
 
@@ -39,15 +51,11 @@ def eval_model(model: nn.Module, config: dict, dataloader: DataLoader, split: st
                 'train_loss': epoch_val_loss,
                 'epoch_duration': 0.0
             }
-        elif split == 'val':
-            logs = {
-                'val_loss': epoch_val_loss,
-                'val_accuracy': epoch_accuracy
-            }
         else:
             logs = {
-                'test_loss': epoch_val_loss,
-                'test_accuracy': epoch_accuracy
+                f'{split}_loss': epoch_val_loss,
+                f'{split}_accuracy': epoch_accuracy,
+                f'{split}_f1_score': f1_score
             }
 
     return logs
@@ -63,9 +71,9 @@ def train_model(model: nn.Module, config: dict):
     print(f'Starting training for {epochs} epochs on {device}.')
     print(f'\nEpoch 0')
     train_logs = eval_model(model, config, config['train_loader'], 'train')
-    print_logs('Train', train_logs)
+    # print_logs('Train', train_logs)
     val_logs = eval_model(model, config, config['val_loader'], 'val')
-    print_logs('Eval', val_logs)
+    # print_logs('Eval', val_logs)
 
     wandb.log({**train_logs, **val_logs})
 
@@ -93,10 +101,10 @@ def train_model(model: nn.Module, config: dict):
         train_logs = {
             'epoch_duration': epoch_duration
         }
-        print_logs('Train', train_logs)
+        # print_logs('Train', train_logs)
 
         val_logs = eval_model(model, config, config['val_loader'], 'val')
-        print_logs('Eval', val_logs)
+        # print_logs('Eval', val_logs)
 
         wandb.log({**train_logs, **val_logs})
 
