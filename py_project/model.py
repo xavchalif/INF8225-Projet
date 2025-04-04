@@ -5,7 +5,7 @@ from torchvision import models
 from torchvision.models import ResNet18_Weights
 
 
-class BuildingBlock(nn.Module):
+class BasicBlock(nn.Module):
     def __init__(self, in_channels, out_channels, stride=1, downsample=None):
         super().__init__()
         self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=stride, padding=1, bias=False)
@@ -112,7 +112,7 @@ class Model(nn.Module):
 
         # Use for model from scratch
         layers = [2, 2, 2, 2]  # Layers of resnet18
-        self.resnet = ResNet(BuildingBlock, layers, config, out_channels)
+        self.resnet = ResNet(BasicBlock, layers, config, out_channels)
 
     def forward(self, x):
         return self.resnet(x)
