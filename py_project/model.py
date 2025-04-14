@@ -1,11 +1,11 @@
 import torch
 import torch.nn as nn
 from torchinfo import summary
-from torchvision import models
-from torchvision.models import ResNet18_Weights
 
 
 class BasicBlock(nn.Module):
+    expansion = 1
+
     def __init__(self, in_channels, out_channels, stride=1, downsample=None):
         super().__init__()
         self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=stride, padding=1, bias=False)
@@ -14,7 +14,6 @@ class BasicBlock(nn.Module):
         self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1, bias=False)
         self.bn2 = nn.BatchNorm2d(out_channels)
         self.downsample = downsample
-        self.stride = stride
 
     def forward(self, x):
         identity = x
@@ -34,6 +33,42 @@ class BasicBlock(nn.Module):
         return out
 
 
+class Bottleneck(nn.Module):
+    expansion = 4
+
+    def __init__(self, in_channels, out_channels, stride=1, downsample=None):
+        super().__init__()
+        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=stride, bias=False)
+        self.bn1 = nn.BatchNorm2d(out_channels)
+        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1, bias=False)
+        self.bn2 = nn.BatchNorm2d(out_channels)
+        self.conv3 = nn.Conv2d(out_channels, out_channels * self.expansion, kernel_size=1, bias=False)
+        self.bn3 = nn.BatchNorm2d(out_channels * self.expansion)
+        self.relu = nn.ReLU(inplace=True)
+        self.downsample = downsample
+
+    def forward(self, x):
+        identity = x
+
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
+
+        out = self.conv2(out)
+        out = self.bn2(out)
+        out = self.relu(out)
+
+        out = self.conv3(out)
+        out = self.bn3(out)
+
+        if self.downsample is not None:
+            identity = self.downsample(x)
+
+        out += identity
+        out = self.relu(out)
+        return out
+
+
 class ResNet(nn.Module):
     def __init__(self, block, layers, config, out_channels):
         super().__init__()
@@ -41,7 +76,6 @@ class ResNet(nn.Module):
         self.conv1 = nn.Conv2d(1, self.in_channels, kernel_size=7, stride=2, padding=3, bias=False)
         self.bn1 = nn.BatchNorm2d(self.in_channels)
         self.relu = nn.ReLU(inplace=True)
-
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
         self.layer1 = self._make_layer(block, 64, layers[0])
@@ -53,7 +87,7 @@ class ResNet(nn.Module):
 
         self.fc = nn.Sequential(
             nn.Dropout(p=config['dropout']),
-            nn.Linear(512, out_channels)
+            nn.Linear(512 * block.expansion, out_channels)
         )
 
         for m in self.modules():
@@ -65,15 +99,15 @@ class ResNet(nn.Module):
 
     def _make_layer(self, block, out_channels, blocks, stride=1):
         downsample = None
-        if stride != 1 or self.in_channels != out_channels:
+        if stride != 1 or self.in_channels != out_channels * block.expansion:
             downsample = nn.Sequential(
-                nn.Conv2d(self.in_channels, out_channels, kernel_size=1, stride=stride, bias=False),
-                nn.BatchNorm2d(out_channels)
+                nn.Conv2d(self.in_channels, out_channels * block.expansion, kernel_size=1, stride=stride, bias=False),
+                nn.BatchNorm2d(out_channels * block.expansion)
             )
 
         layers = []
         layers.append(block(self.in_channels, out_channels, stride, downsample))
-        self.in_channels = out_channels
+        self.in_channels = out_channels * block.expansion
         for _ in range(1, blocks):
             layers.append(block(self.in_channels, out_channels))
 
@@ -101,8 +135,8 @@ class Model(nn.Module):
     def __init__(self, config, out_channels):
         super().__init__()
         # Use for pytorch model
-        # Weight if pretrained: ResNet18_Weights.IMAGENET1K_V1
-        # self.resnet = models.resnet18(weights=None)
+        # Weights if pretrained: ResNet18_Weights.IMAGENET1K_V1 or ResNet50_Weights.IMAGENET1K_V1
+        # self.resnet = models.resnet50(weights=None)
         # self.resnet.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
         # nn.init.kaiming_normal_(self.resnet.conv1.weight, mode="fan_out", nonlinearity="relu")
         # self.resnet.fc = nn.Sequential(
@@ -110,9 +144,13 @@ class Model(nn.Module):
         #     nn.Linear(self.resnet.fc.in_features, out_channels)
         # )
 
-        # Use for model from scratch
-        layers = [2, 2, 2, 2]  # Layers of resnet18
-        self.resnet = ResNet(BasicBlock, layers, config, out_channels)
+        # Use for resnet18 from scratch
+        # layers = [2, 2, 2, 2]  # Layers of resnet18
+        # self.resnet = ResNet(BasicBlock, layers, config, out_channels)
+
+        # Use for resnet50 from scratch
+        layers = [3, 4, 6, 3]  # Layers of resnet50
+        self.resnet = ResNet(Bottleneck, layers, config, out_channels)
 
     def forward(self, x):
         return self.resnet(x)

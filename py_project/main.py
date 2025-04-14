@@ -11,7 +11,7 @@ from training import train_model, eval_model, print_logs
 labels = ['opacity', 'normal']
 config = {
     'epochs': 5,
-    'batch_size': 64,
+    'batch_size': 32,
     'lr': 0.00001,
     'betas': (0.9, 0.999),
     'device': 'cuda' if torch.cuda.is_available() else 'cpu',
